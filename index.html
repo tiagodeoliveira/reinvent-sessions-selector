@@ -1,0 +1,160 @@
+<html>
+    <head>
+        <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css" integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.5.1/jquery.min.js" integrity="sha512-bLT0Qm9VnAYZDflyKcBaQ2gg0hSYNQrJ8RilYldYQ1FxQYoCLtUjuuRuZo+fjqhx/qtq/1itJ0C2ejDxltZVFg==" crossorigin="anonymous"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.7/umd/popper.min.js" integrity="sha384-UO2eT0CpHqdSJQ6hJty5KVphtPhzWj9WO1clHTMGa3JDZwrnQq4sF86dIHNDz0W1" crossorigin="anonymous"></script>
+        <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js" integrity="sha384-JjSmVgyd0p3pXB1rRibZUAYoIIy6OrQ6VrjIEaFf/nJGzIxFDsf4x0xIM+B07jRM" crossorigin="anonymous"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.1/moment.min.js" integrity="sha512-qTXRIMyZIFb8iQcfjXWCO8+M5Tbc38Qi5WzdPOYZHIlZpzBHG3L3by84BBBOiRGiEb7KKtAOAs5qYdUiZiQNNQ==" crossorigin="anonymous"></script>        
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/moment-timezone/0.5.32/moment-timezone.min.js" integrity="sha512-u3yRfU7FD5wGhxEMFZLZT/W/Y+C0vqUuQjPAhRWnQjBZ1LhUMnyTnZ6AfwxLSCxACT4eiyAnjFAMIt0qog67qg==" crossorigin="anonymous"></script>        
+        <style>
+          .filters {
+            margin: 5px;
+          }
+          .filter {
+            display: inline-block;
+            padding: 5px;
+            background-color: #555;
+            margin: 3px;
+          }
+          </style>        
+        <title>Sessions</title>
+    </head>
+    <body style="margin: 10px;">
+      <div class="filters" id="filters"></div>
+      <h2 id="total_sessions"></h2>
+      <div id="sessions" class="list-group">
+      </div>
+      <br />
+      <button type="button" id="export_button" class="btn btn-primary" onclick="exportList(); return false">Export Selected</button>
+      <br />
+      <div id="output"></div>
+    </body>
+    <script type="text/javascript">
+      sessionsList = [];
+      selectedSessionsList = [];
+      filters = [
+        'session.hiddenTags.includes("english")',
+//        '!session.hiddenTags.includes("__partners")',
+//        '!session.hiddenTags.includes("__education_programs")',
+//        '!session.hiddenTags.includes("__healthcare")',
+//        '!session.hiddenTags.includes("__global_partner_summit__gps_")',
+//        '!session.hiddenTags.includes("__media___entertainment")',
+//        '!session.hiddenTags.includes("__public_sector")',
+//        '!session.hiddenTags.includes("__we_power_tech_lounge")',
+//        '!session.tags.includes("Partner Solutions for Business")',      
+      ];
+
+      function exportList() {
+        var exportSessions = selectedSessionsList.map(id => {
+          session = sessionsList.find(s => s.id === id)
+          if (!session)
+          begin = moment.unix(session.schedulingData.start.timestamp);
+          end = moment.unix(session.schedulingData.end.timestamp);
+          when = `${begin.format('MMM Do, YYYY | hh:mm A to ')} ${end.format('hh:mm A CET')}`;
+
+          return {
+            name: session.name,
+            description: session.description,
+            tags: session.tags,
+            when: when,
+          }
+        });
+
+        exportSessionsHtml = jQuery.unique(exportSessions.sort((a, b) => a.name.localeCompare(b.name)).map(session => {
+          return `<tr><td>${session.name}</td><td>${session.description}</td><td>${session.tags}</td></tr>`.trim()
+        }));
+        var exportTable = `
+          <table style="width:100%">
+            <tr>
+              <th>Name</th>
+              <th>Description</th>
+              <th>tags</th>
+            </tr>
+            ${exportSessionsHtml.join('')}
+          </table>         
+        `
+
+        $('#output').html(exportTable);
+      }
+
+      function sessionSelected(id) {
+        if (!id || id === "") {
+          return false;
+        }
+
+        $(`#${id}`).toggleClass('active');
+        if ($(`#${id}`).hasClass('active')) {
+          selectedSessionsList.push(id);
+        } else {
+          const index = selectedSessionsList.indexOf(id);
+          if (index > -1) {
+            selectedSessionsList.splice(index, 1);
+          }
+        }
+        localStorage.setItem("selectedSessionsList", selectedSessionsList);
+
+        $('#export_button').text(`Export Selected (${selectedSessionsList.length})`);
+        return false;
+      }
+
+      function updateFilters(filters) {
+        filtersHtml = filters.map(f => {
+          return `<span class="filter rounded">${f}</span>`
+        });
+
+        $('#filters').html(filtersHtml);
+      }
+
+      function renderList(sessionList) {
+        var selectedSessionsListString = localStorage.getItem("selectedSessionsList");
+        selectedSessionsList = [];
+        if (selectedSessionsListString) {
+          selectedSessionsList = selectedSessionsListString.trim().split(',');
+        }
+        
+        console.log('rendering', selectedSessionsList);
+        var sessions = sessionList
+        if (filters && filters.length > 0) {
+          sessions = sessionList.filter(session => eval(filters.join(' && ')));
+        } 
+        var total_sessions = sessions.length;
+        $("#total_sessions").text(`Total Sessions: ${total_sessions}`);
+
+        var previuosDay;
+        sessionsHtml = sessions.map(session => {
+          begin = moment.unix(session.schedulingData.start.timestamp);
+          end = moment.unix(session.schedulingData.end.timestamp);
+          when = `${begin.format('MMM Do, YYYY | hh:mm A to ')} ${end.format('hh:mm A')} CET`;
+          
+          var separator = '';
+          if (previuosDay !== begin.dayOfYear()) {
+            var separator = `<div><br /><br /><hr>${begin.format('MMM Do, YYYY')} <br /><br /></div>`;
+            previuosDay = begin.dayOfYear();
+          }
+        
+          const active = (selectedSessionsList && selectedSessionsList.indexOf(session.id) > -1) ? 'active' : '';
+
+          return `
+            ${separator}
+            <a href="#" id="${session.id}" class="list-group-item list-group-item-action flex-column align-items-start ${active}" onclick="sessionSelected('${session.id}'); return false;">
+              <div class="d-flex w-100 justify-content-between">
+                <h5 class="mb-1">${session.name}</h5>
+                <small>${when}</small>                  
+              </div>
+              <p class="mb-1">${session.description}</p>
+              <small>${session.hiddenTags},${session.tags}</small>
+            </a>
+          `
+        });
+        $('#sessions').html(sessionsHtml); 
+      }
+
+      $(function() {
+        updateFilters(filters);
+        $.getJSON("agenda.json", function(data) {
+          sessionsList = data.sessions;
+          renderList(sessionsList);
+        });
+      });        
+    </script>
+</html>
